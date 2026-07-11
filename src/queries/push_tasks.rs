@@ -16,7 +16,6 @@ const PUSH_TASKS: &str = include_str!(concat!(
 ));
 
 #[derive(Clone, SurrealValue)]
-#[surreal(crate = "surrealdb::types")]
 struct PushRow {
     id: RecordId,
     args: Bytes,

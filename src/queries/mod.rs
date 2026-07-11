@@ -1,12 +1,19 @@
 use surrealdb::types::QueryError;
 
 pub mod ack_task;
+pub mod fetch_by_id;
 pub mod fetch_next;
 pub mod keep_alive;
+pub mod list_queues;
+pub mod list_tasks;
+pub mod list_workers;
 pub mod lock_task;
+pub mod metrics;
 pub mod push_tasks;
 pub mod register_worker;
 pub mod reenqueue_orphaned;
+pub mod vacuum;
+pub mod wait_for;
 
 pub(crate) const MAX_TX_RETRIES: usize = 5;
 

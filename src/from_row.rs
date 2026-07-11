@@ -4,7 +4,6 @@ use surrealdb::types::{Bytes, Datetime, RecordId, RecordIdKey, SurrealValue};
 use crate::errors::SurrealError;
 
 #[derive(Debug, SurrealValue)]
-#[surreal(crate = "surrealdb::types")]
 pub(crate) struct SurrealTaskRow {
     pub(crate) id: RecordId,
     pub(crate) args: Bytes,
