@@ -1,6 +1,6 @@
-LET $stale = SELECT VALUE record::id(id) FROM workers
+LET $stale = SELECT VALUE record::id(id) FROM worker
     WHERE queue = $queue AND last_seen < time::now() - duration::from_secs($dur);
-UPDATE jobs SET
+UPDATE job SET
     status = 'Pending',
     attempts = attempts + 1,
     lock_by = NONE,

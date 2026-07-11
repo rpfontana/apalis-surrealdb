@@ -28,9 +28,9 @@ const SCHEMA: &str = include_str!("schema.surql");
 
 const SCHEMA_VERSION: i64 = 1;
 
-pub const JOBS_TABLE: &str = "jobs";
+pub const JOB_TABLE: &str = "job";
 
-pub const WORKERS_TABLE: &str = "workers";
+pub const WORKER_TABLE: &str = "worker";
 
 /// The task context stored alongside every job in SurrealDB
 pub type SurrealContext = SqlContext<Surreal<Any>>;

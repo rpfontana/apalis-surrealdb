@@ -9,7 +9,7 @@ use surrealdb::{
 };
 use ulid::Ulid;
 
-use crate::{JOBS_TABLE, SurrealContext, SurrealError};
+use crate::{JOB_TABLE, SurrealContext, SurrealError};
 
 const ACK_TASK: &str = include_str!(concat!(
     env!("CARGO_MANIFEST_DIR"),
@@ -25,7 +25,7 @@ pub async fn ack_task(
     status: &Status,
     attempt: i64,
 ) -> Result<(), SurrealError> {
-    let id = RecordId::new(JOBS_TABLE, task_id.to_string());
+    let id = RecordId::new(JOB_TABLE, task_id.to_string());
     let mut response = conn
         .query(ACK_TASK)
         .bind(("id", id))

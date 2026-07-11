@@ -7,7 +7,7 @@ use surrealdb::{
 };
 
 use crate::{
-    Config, SurrealError, WORKERS_TABLE,
+    Config, SurrealError, WORKER_TABLE,
     queries::{reenqueue_orphaned::reenqueue_orphaned, register_worker::register_worker},
 };
 
@@ -23,7 +23,7 @@ pub async fn keep_alive(
     worker: &WorkerContext,
 ) -> Result<(), SurrealError> {
     let name = worker.name().to_owned();
-    let id = RecordId::new(WORKERS_TABLE, name.clone());
+    let id = RecordId::new(WORKER_TABLE, name.clone());
     let mut response = conn
         .query(KEEP_ALIVE)
         .bind(("worker", id))

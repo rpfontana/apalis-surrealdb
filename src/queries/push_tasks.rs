@@ -6,7 +6,7 @@ use surrealdb::{
 use ulid::Ulid;
 
 use crate::{
-    CompactType, Config, JOBS_TABLE, SurrealError, SurrealTask,
+    CompactType, Config, JOB_TABLE, SurrealError, SurrealTask,
     queries::{MAX_TX_RETRIES, is_retryable_conflict},
 };
 
@@ -46,7 +46,7 @@ pub async fn push_tasks(
             let run_at =
                 Datetime::from_timestamp(task.parts.run_at as i64, 0).unwrap_or_else(Datetime::now);
             PushRow {
-                id: RecordId::new(JOBS_TABLE, id),
+                id: RecordId::new(JOB_TABLE, id),
                 args: Bytes::from(task.args),
                 queue: queue.clone(),
                 max_attempts: i64::from(task.parts.ctx.max_attempts()),

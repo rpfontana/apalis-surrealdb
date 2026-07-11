@@ -1,7 +1,7 @@
 BEGIN;
 FOR $task IN $tasks {
     IF $task.idempotency_key IS NONE
-        OR count((SELECT id FROM jobs WHERE queue = $task.queue AND idempotency_key = $task.idempotency_key)) = 0 {
+        OR count((SELECT id FROM job WHERE queue = $task.queue AND idempotency_key = $task.idempotency_key)) = 0 {
         CREATE $task.id CONTENT {
             args: $task.args,
             queue: $task.queue,

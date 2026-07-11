@@ -5,7 +5,7 @@ use surrealdb::{
 };
 use ulid::Ulid;
 
-use crate::{JOBS_TABLE, SurrealError};
+use crate::{JOB_TABLE, SurrealError};
 
 const LOCK_TASK: &str = include_str!(concat!(
     env!("CARGO_MANIFEST_DIR"),
@@ -18,7 +18,7 @@ pub async fn lock_task(
     task_id: &Ulid,
     worker: &str,
 ) -> Result<(), SurrealError> {
-    let id = RecordId::new(JOBS_TABLE, task_id.to_string());
+    let id = RecordId::new(JOB_TABLE, task_id.to_string());
     let mut response = conn
         .query(LOCK_TASK)
         .bind(("id", id))

@@ -1,5 +1,5 @@
 BEGIN;
-LET $due = SELECT VALUE id FROM jobs
+LET $due = SELECT VALUE id FROM job
     WHERE queue = $queue
       AND ((status = 'Pending' AND lock_by IS NONE)
            OR (status = 'Failed' AND attempts < max_attempts))

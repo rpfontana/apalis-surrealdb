@@ -1,7 +1,7 @@
 use apalis_core::worker::context::WorkerContext;
 use surrealdb::{Surreal, engine::any::Any, types::RecordId};
 
-use crate::{Config, SurrealError, WORKERS_TABLE};
+use crate::{Config, SurrealError, WORKER_TABLE};
 
 const REGISTER_WORKER: &str = include_str!(concat!(
     env!("CARGO_MANIFEST_DIR"),
@@ -18,7 +18,7 @@ pub async fn register_worker(
     storage_name: &str,
 ) -> Result<(), SurrealError> {
     let name = worker.name().to_owned();
-    let id = RecordId::new(WORKERS_TABLE, name.clone());
+    let id = RecordId::new(WORKER_TABLE, name.clone());
     let keep_alive = config.keep_alive().as_secs() as i64;
 
     let response = conn
