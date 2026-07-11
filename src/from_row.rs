@@ -1,10 +1,10 @@
 use apalis_sql::TaskRow;
-use serde::Deserialize;
-use surrealdb::types::{Bytes, Datetime, RecordId, RecordIdKey};
+use surrealdb::types::{Bytes, Datetime, RecordId, RecordIdKey, SurrealValue};
 
 use crate::errors::SurrealError;
 
-#[derive(Debug, Deserialize)]
+#[derive(Debug, SurrealValue)]
+#[surreal(crate = "surrealdb::types")]
 pub(crate) struct SurrealTaskRow {
     pub(crate) id: RecordId,
     pub(crate) args: Bytes,

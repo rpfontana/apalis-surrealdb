@@ -13,6 +13,9 @@ pub enum SurrealError {
     #[error(transparent)]
     Row(#[from] FromRowError),
 
+    #[error("Task not found: {0}")]
+    TaskNotFound(String),
+
     #[error("Worker already exists: {0}")]
     WorkerAlreadyExists(String),
 

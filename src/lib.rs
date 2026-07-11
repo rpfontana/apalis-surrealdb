@@ -14,12 +14,19 @@ pub use surrealdb::{
     engine::any::{Any, connect},
 };
 
+pub use crate::ack::{LockTaskLayer, SurrealAck};
 pub use crate::errors::SurrealError;
+use crate::sink::SurrealSink;
 
+mod ack;
 mod errors;
 mod from_row;
+pub mod queries;
+pub mod sink;
 
 const SCHEMA: &str = include_str!("schema.surql");
+
+const SCHEMA_VERSION: i64 = 1;
 
 pub const JOBS_TABLE: &str = "jobs";
 
@@ -46,6 +53,8 @@ pub struct SurrealStorage<T, C, Fetcher> {
     codec: PhantomData<C>,
     config: Config,
     #[pin]
+    sink: SurrealSink<T, CompactType, C>,
+    #[pin]
     fetcher: Fetcher,
 }
 
@@ -67,6 +76,7 @@ impl<T, C, F: Clone> Clone for SurrealStorage<T, C, F> {
             job_type: PhantomData,
             codec: self.codec,
             config: self.config.clone(),
+            sink: self.sink.clone(),
             fetcher: self.fetcher.clone(),
         }
     }
@@ -76,6 +86,10 @@ impl SurrealStorage<(), (), ()> {
     /// Define the tables, fields and indexes required by the backend.
     pub async fn setup(conn: &Surreal<Any>) -> Result<(), SurrealError> {
         conn.query(SCHEMA).await?.check()?;
+        conn.query("UPSERT apalis_meta:schema SET version = $version")
+            .bind(("version", SCHEMA_VERSION))
+            .await?
+            .check()?;
         Ok(())
     }
 }
@@ -107,6 +121,7 @@ impl<T> SurrealStorage<T, (), ()> {
             job_type: PhantomData,
             codec: PhantomData,
             config: config.clone(),
+            sink: SurrealSink::new(conn, config),
             fetcher: SurrealFetcher,
         }
     }
@@ -115,11 +130,13 @@ impl<T> SurrealStorage<T, (), ()> {
 impl<T, C, F> SurrealStorage<T, C, F> {
     /// Change the codec used to serialize and deserialize task arguments
     pub fn with_codec<D>(self) -> SurrealStorage<T, D, F> {
+        let sink = SurrealSink::new(&self.conn, &self.config);
         SurrealStorage {
             conn: self.conn,
             job_type: PhantomData,
             codec: PhantomData,
             config: self.config,
+            sink,
             fetcher: self.fetcher,
         }
     }

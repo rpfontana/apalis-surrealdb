@@ -1,0 +1,125 @@
+use apalis_core::{
+    error::BoxDynError,
+    layers::{Layer, Service},
+    task::Parts,
+    worker::{context::WorkerContext, ext::ack::Acknowledge},
+};
+use futures::{FutureExt, future::BoxFuture};
+use serde::Serialize;
+use surrealdb::{Surreal, engine::any::Any};
+use ulid::Ulid;
+
+use crate::{
+    SurrealContext, SurrealError, SurrealTask,
+    queries::{
+        ack_task::{ack_task, calculate_status},
+        lock_task::lock_task,
+    },
+};
+
+#[derive(Clone, Debug)]
+pub struct SurrealAck {
+    conn: Surreal<Any>,
+}
+
+impl SurrealAck {
+    #[must_use]
+    pub fn new(conn: Surreal<Any>) -> Self {
+        Self { conn }
+    }
+}
+
+impl<Res: Serialize + 'static> Acknowledge<Res, SurrealContext, Ulid> for SurrealAck {
+    type Error = SurrealError;
+    type Future = BoxFuture<'static, Result<(), Self::Error>>;
+
+    fn ack(
+        &mut self,
+        res: &Result<Res, BoxDynError>,
+        parts: &Parts<SurrealContext, Ulid>,
+    ) -> Self::Future {
+        let task_id = parts.task_id.map(|id| *id.inner());
+        let worker = parts.ctx.lock_by().clone();
+        let result = serde_json::to_value(res.as_ref().map_err(ToString::to_string));
+        let status = calculate_status(parts, res);
+        parts.status.store(status.clone());
+        let attempt = parts.attempt.current() as i64;
+        let conn = self.conn.clone();
+        async move {
+            let task_id = task_id.ok_or(SurrealError::MissingTaskId)?;
+            let worker = worker.ok_or(SurrealError::MissingWorkerContext)?;
+            let result = result.map_err(|e| SurrealError::Decode(e.into()))?;
+            ack_task(&conn, &task_id, &worker, result, &status, attempt).await?;
+            Ok(())
+        }
+        .boxed()
+    }
+}
+
+#[derive(Clone, Debug)]
+pub struct LockTaskLayer {
+    conn: Surreal<Any>,
+}
+
+impl LockTaskLayer {
+    #[must_use]
+    pub fn new(conn: Surreal<Any>) -> Self {
+        Self { conn }
+    }
+}
+
+impl<S> Layer<S> for LockTaskLayer {
+    type Service = LockTaskService<S>;
+
+    fn layer(&self, inner: S) -> Self::Service {
+        LockTaskService {
+            inner,
+            conn: self.conn.clone(),
+        }
+    }
+}
+
+#[derive(Clone, Debug)]
+pub struct LockTaskService<S> {
+    inner: S,
+    conn: Surreal<Any>,
+}
+
+impl<S, Args> Service<SurrealTask<Args>> for LockTaskService<S>
+where
+    S: Service<SurrealTask<Args>> + Send + 'static,
+    S::Future: Send + 'static,
+    S::Error: Into<BoxDynError>,
+    Args: Send + 'static,
+{
+    type Response = S::Response;
+    type Error = BoxDynError;
+    type Future = BoxFuture<'static, Result<Self::Response, Self::Error>>;
+
+    fn poll_ready(&mut self, cx: &mut std::task::Context<'_>) -> std::task::Poll<Result<(), Self::Error>> {
+        self.inner.poll_ready(cx).map_err(Into::into)
+    }
+
+    fn call(&mut self, mut req: SurrealTask<Args>) -> Self::Future {
+        let conn = self.conn.clone();
+        let worker = req
+            .parts
+            .data
+            .get::<WorkerContext>()
+            .map(|w| w.name().to_owned());
+        let task_id = req.parts.task_id.map(|id| *id.inner());
+        let Some(worker) = worker else {
+            return async { Err(SurrealError::MissingWorkerContext.into()) }.boxed();
+        };
+        let Some(task_id) = task_id else {
+            return async { Err(SurrealError::MissingTaskId.into()) }.boxed();
+        };
+        req.parts.ctx = req.parts.ctx.with_lock_by(Some(worker.clone()));
+        let fut = self.inner.call(req);
+        async move {
+            lock_task(&conn, &task_id, &worker).await?;
+            fut.await.map_err(Into::into)
+        }
+        .boxed()
+    }
+}
