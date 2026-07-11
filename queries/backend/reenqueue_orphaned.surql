@@ -7,4 +7,7 @@ UPDATE job SET
     lock_at = NONE,
     done_at = NONE,
     last_result = { Err: 'Re-enqueued due to worker heartbeat timeout.' }
-    WHERE queue = $queue AND status IN ['Queued', 'Running'] AND lock_by IN $stale;
+    WHERE queue = $queue
+      AND ((status IN ['Queued', 'Running'] AND lock_by IN $stale)
+           OR (status = 'Queued' AND lock_by IS NONE AND lock_at != NONE
+               AND lock_at <= time::now() - duration::from_secs($dur)));

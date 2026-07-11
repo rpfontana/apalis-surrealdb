@@ -26,6 +26,7 @@ pub use surrealdb::{
 pub use crate::ack::{LockTaskLayer, SurrealAck};
 pub use crate::errors::SurrealError;
 pub use crate::fetcher::{SurrealFetcher, SurrealLiveFetcher, SurrealPollFetcher};
+pub use crate::shared::{SharedSurrealError, SharedSurrealStorage};
 use crate::{
     queries::{
         fetch_next::fetch_next,
@@ -40,6 +41,7 @@ mod errors;
 pub mod fetcher;
 mod from_row;
 pub mod queries;
+pub mod shared;
 pub mod sink;
 
 const SCHEMA: &str = include_str!("schema.surql");

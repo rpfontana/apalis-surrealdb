@@ -3,6 +3,7 @@ use surrealdb::types::QueryError;
 pub mod ack_task;
 pub mod fetch_by_id;
 pub mod fetch_next;
+pub mod fetch_next_shared;
 pub mod keep_alive;
 pub mod list_queues;
 pub mod list_tasks;
