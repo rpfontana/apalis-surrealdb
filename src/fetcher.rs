@@ -79,6 +79,7 @@ impl<Compact, Decode> Clone for SurrealPollFetcher<Compact, Decode> {
 }
 
 impl<Decode> SurrealPollFetcher<CompactType, Decode> {
+    /// Create a poll fetcher that claims batches for the given worker
     #[must_use]
     pub fn new(conn: &Surreal<Any>, config: &Config, wrk: &WorkerContext) -> Self {
         Self {
@@ -163,6 +164,7 @@ impl<Decode> Stream for SurrealPollFetcher<CompactType, Decode> {
 }
 
 impl<Compact, Decode> SurrealPollFetcher<Compact, Decode> {
+    /// Drain tasks already claimed but not yet yielded
     pub fn take_pending(&mut self) -> VecDeque<SurrealTask<CompactType>> {
         match &mut self.state {
             StreamState::Buffered(tasks) => std::mem::take(tasks),
@@ -188,6 +190,7 @@ pub struct SurrealLiveFetcher {
 }
 
 impl SurrealLiveFetcher {
+    /// Create a live-query fetcher over the given connection
     #[must_use]
     pub fn new(conn: &Surreal<Any>) -> Self {
         Self {

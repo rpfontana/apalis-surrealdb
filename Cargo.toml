@@ -29,6 +29,7 @@ ulid = { version = "1", features = ["serde"] }
 tokio = { version = "1", features = ["macros", "rt-multi-thread"] }
 futures-util = "0.3.31"
 surrealdb = { version = "3.2.1", features = ["kv-mem"] }
+apalis-codec = { version = "0.1.0-rc.9", features = ["msgpack"] }
 
 
 [package.metadata.docs.rs]

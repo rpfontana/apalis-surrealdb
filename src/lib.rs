@@ -5,6 +5,7 @@ use std::{fmt, marker::PhantomData};
 use apalis_codec::json::JsonCodec;
 use apalis_core::{
     backend::{Backend, BackendExt, TaskStream, codec::Codec, queue::Queue},
+    features_table,
     layers::Stack,
     task::Task,
     worker::{context::WorkerContext, ext::ack::AcknowledgeLayer},
@@ -38,10 +39,14 @@ use crate::{
 
 mod ack;
 mod errors;
+/// Fetchers that stream due tasks from SurrealDB
 pub mod fetcher;
 mod from_row;
+/// Typed SurrealQL operations backing the storage
 pub mod queries;
+/// Shared storage multiplexing job types over one connection
 pub mod shared;
+/// Buffered sink that flushes queued tasks into SurrealDB
 pub mod sink;
 
 const SCHEMA: &str = include_str!("schema.surql");
@@ -62,6 +67,30 @@ pub type SurrealTask<Args> = Task<Args, SurrealContext, Ulid>;
 pub type CompactType = Vec<u8>;
 
 /// A storage backend for apalis backed by SurrealDB
+#[doc = features_table! {
+    setup = r#"
+        # {
+        #   use apalis_surrealdb::{SurrealStorage, connect};
+        #   let conn = connect("mem://").await.unwrap();
+        #   conn.use_ns("test").use_db("test").await.unwrap();
+        #   SurrealStorage::setup(&conn).await.unwrap();
+        #   SurrealStorage::new(&conn)
+        # };
+    "#,
+
+    Backend => supported("Store and fetch tasks from SurrealDB", true),
+    TaskSink => supported("Push new tasks onto a queue", true),
+    Serialization => supported("Pluggable codec for task arguments", true),
+    WaitForCompletion => supported("Await task completion without blocking", true),
+    FetchById => supported("Fetch a task by its id", false),
+    RegisterWorker => supported("Register and heartbeat workers with the backend", false),
+    MakeShared => supported("Share one connection across queues via [`SharedSurrealStorage`](crate::SharedSurrealStorage)", false),
+    ListWorkers => supported("List workers registered with the backend", false),
+    ListTasks => supported("List and filter tasks in a queue", false),
+    ListQueues => supported("List queues with their statistics", false),
+    Metrics => supported("Collect queue and global statistics", false),
+    Vacuum => supported("Purge completed tasks from storage", false),
+}]
 #[pin_project::pin_project]
 pub struct SurrealStorage<T, C, Fetcher> {
     conn: Surreal<Any>,

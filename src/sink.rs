@@ -30,6 +30,7 @@ pub struct SurrealSink<Args, Compact, Codec> {
 }
 
 impl<Args, Compact, Codec> SurrealSink<Args, Compact, Codec> {
+    /// Create a sink that flushes tasks to the given queue
     #[must_use]
     pub fn new(conn: &Surreal<Any>, config: &Config) -> Self {
         Self {
