@@ -7,7 +7,8 @@ use surrealdb::{Surreal, engine::any::Any};
 use ulid::Ulid;
 
 use crate::{
-    CompactType, SurrealContext, SurrealError, SurrealStorage, SurrealTask, from_row::SurrealTaskRow,
+    CompactType, SurrealContext, SurrealError, SurrealStorage, SurrealTask,
+    from_row::SurrealTaskRow,
 };
 
 const LIST_JOBS: &str = include_str!(concat!(

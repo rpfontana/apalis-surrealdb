@@ -1,4 +1,3 @@
-use std::sync::Arc;
 use apalis_core::{
     error::BoxDynError,
     layers::{Layer, Service},
@@ -7,6 +6,7 @@ use apalis_core::{
 };
 use futures::{FutureExt, future::BoxFuture};
 use serde::Serialize;
+use std::sync::Arc;
 use surrealdb::{Surreal, engine::any::Any};
 use ulid::Ulid;
 
@@ -100,7 +100,10 @@ where
     type Error = BoxDynError;
     type Future = BoxFuture<'static, Result<Self::Response, Self::Error>>;
 
-    fn poll_ready(&mut self, cx: &mut std::task::Context<'_>) -> std::task::Poll<Result<(), Self::Error>> {
+    fn poll_ready(
+        &mut self,
+        cx: &mut std::task::Context<'_>,
+    ) -> std::task::Poll<Result<(), Self::Error>> {
         self.inner.poll_ready(cx).map_err(Into::into)
     }
 

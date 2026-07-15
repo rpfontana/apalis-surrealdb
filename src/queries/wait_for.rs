@@ -73,7 +73,9 @@ where
                         .query(FETCH_COMPLETED_TASKS)
                         .bind(("ids", record_ids(remaining.iter())))
                         .await?;
-                    response.take::<Vec<ResultRow>>(0).map_err(SurrealError::from)
+                    response
+                        .take::<Vec<ResultRow>>(0)
+                        .map_err(SurrealError::from)
                 };
                 let rows = match fetch.await {
                     Ok(rows) => rows,

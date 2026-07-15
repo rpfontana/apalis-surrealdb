@@ -14,8 +14,12 @@ async fn main() {
     SurrealStorage::setup(&conn).await.unwrap();
     let mut backend = SurrealStorage::new(&conn);
 
-    let task_1 = TaskBuilder::new(42u32).with_idempotency_key(dedupe_key).build();
-    let task_2 = TaskBuilder::new(43u32).with_idempotency_key(dedupe_key).build();
+    let task_1 = TaskBuilder::new(42u32)
+        .with_idempotency_key(dedupe_key)
+        .build();
+    let task_2 = TaskBuilder::new(43u32)
+        .with_idempotency_key(dedupe_key)
+        .build();
 
     // the second push is skipped, the key already exists
     backend.push_task(task_1).await.unwrap();
@@ -26,8 +30,6 @@ async fn main() {
         worker.stop()?;
         Ok(())
     }
-    let worker = WorkerBuilder::new("worker-1")
-        .backend(backend)
-        .build(task);
+    let worker = WorkerBuilder::new("worker-1").backend(backend).build(task);
     worker.run().await.unwrap();
 }

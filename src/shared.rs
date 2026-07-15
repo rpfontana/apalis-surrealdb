@@ -294,12 +294,23 @@ impl<Args, Decode: Send + 'static> SurrealStorage<Args, Decode, SharedFetcher<Co
         let registered = worker.clone();
         let instance = self.instance.clone();
         let register = stream::once(async move {
-            initial_heartbeat(&conn, &config, &registered, "SharedSurrealStorage", &instance)
-                .await
-                .map(|()| None::<SurrealTask<CompactType>>)
+            initial_heartbeat(
+                &conn,
+                &config,
+                &registered,
+                "SharedSurrealStorage",
+                &instance,
+            )
+            .await
+            .map(|()| None::<SurrealTask<CompactType>>)
         });
-        let eager = SurrealPollFetcher::<CompactType, Decode>::new(&self.conn, &self.config, worker, self.instance.clone())
-            .boxed();
+        let eager = SurrealPollFetcher::<CompactType, Decode>::new(
+            &self.conn,
+            &self.config,
+            worker,
+            self.instance.clone(),
+        )
+        .boxed();
         let lazy = self.fetcher.map(|task| Ok(Some(task))).boxed();
         register.chain(select(lazy, eager))
     }

@@ -14,18 +14,16 @@ use apalis_core::{
     backend::poll_strategy::{PollContext, PollStrategyExt},
     worker::context::WorkerContext,
 };
-use futures::{
-    FutureExt, StreamExt,
-    future::BoxFuture,
-    stream::Stream,
-};
+use futures::{FutureExt, StreamExt, future::BoxFuture, stream::Stream};
 use surrealdb::{
     Notification, Surreal,
     engine::any::Any,
     types::{Action, Value},
 };
 
-use crate::{CompactType, Config, JOB_TABLE, SurrealError, SurrealTask, queries::fetch_next::fetch_next};
+use crate::{
+    CompactType, Config, JOB_TABLE, SurrealError, SurrealTask, queries::fetch_next::fetch_next,
+};
 
 /// Marker fetcher that drives the polling backend for [`SurrealStorage`](crate::SurrealStorage)
 #[derive(Clone, Debug)]

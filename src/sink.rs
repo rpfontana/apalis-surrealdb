@@ -88,13 +88,13 @@ where
         if let Some(mut flush) = this.sink.flush_future.take() {
             match flush.poll_unpin(cx) {
                 Poll::Ready(Ok(())) => Poll::Ready(Ok(())),
-                Poll::Ready(Err(err)) => Poll::Ready(Err(Arc::into_inner(err).unwrap_or_else(
-                    || {
+                Poll::Ready(Err(err)) => {
+                    Poll::Ready(Err(Arc::into_inner(err).unwrap_or_else(|| {
                         SurrealError::Database(surrealdb::Error::internal(
                             "push flush future was unexpectedly shared".to_owned(),
                         ))
-                    },
-                ))),
+                    })))
+                }
                 Poll::Pending => {
                     this.sink.flush_future = Some(flush);
                     Poll::Pending

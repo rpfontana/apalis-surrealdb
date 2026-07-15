@@ -13,7 +13,10 @@ const REENQUEUE_ORPHANED: &str = include_str!(concat!(
 ));
 
 /// Return tasks held by timed-out workers to the queue and report how many
-pub async fn reenqueue_orphaned(conn: &Arc<Surreal<Any>>, config: &Config) -> Result<u64, SurrealError> {
+pub async fn reenqueue_orphaned(
+    conn: &Arc<Surreal<Any>>,
+    config: &Config,
+) -> Result<u64, SurrealError> {
     let dead_for = config.reenqueue_orphaned_after().as_secs() as i64;
     let mut response = conn
         .query(REENQUEUE_ORPHANED)

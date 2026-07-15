@@ -1,6 +1,6 @@
-use std::sync::Arc;
 use apalis_core::{timer::Delay, worker::context::WorkerContext};
 use futures::{Stream, stream};
+use std::sync::Arc;
 use surrealdb::{
     Surreal,
     engine::any::Any,

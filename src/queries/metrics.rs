@@ -69,7 +69,12 @@ pub(crate) fn build_statistics(counts: &OverviewRow, oldest_unix: Option<i64>) -
         stat("DONE_JOBS", "Number", counts.done.to_string(), 4),
         stat("KILLED_JOBS", "Number", counts.killed.to_string(), 4),
         stat("SUCCESS_RATE", "Percentage", success_rate.to_string(), 4),
-        stat("AVG_JOB_DURATION_MINS", "Decimal", avg_duration.to_string(), 5),
+        stat(
+            "AVG_JOB_DURATION_MINS",
+            "Decimal",
+            avg_duration.to_string(),
+            5,
+        ),
         stat("QUEUE_BACKLOG", "Number", counts.backlog.to_string(), 5),
         stat(
             "OLDEST_PENDING_JOB",

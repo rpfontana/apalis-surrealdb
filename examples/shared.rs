@@ -24,6 +24,8 @@ async fn main() {
     }
 
     let int_worker = WorkerBuilder::new("ints").backend(int_store).build(run);
-    let string_worker = WorkerBuilder::new("strings").backend(string_store).build(run);
+    let string_worker = WorkerBuilder::new("strings")
+        .backend(string_store)
+        .build(run);
     tokio::try_join!(int_worker.run(), string_worker.run()).unwrap();
 }

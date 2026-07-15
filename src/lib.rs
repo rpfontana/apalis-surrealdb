@@ -34,8 +34,8 @@ use surrealdb::types::RecordId;
 use crate::{
     queries::{
         fetch_next::fetch_next,
-        kill_task::kill_task,
         keep_alive::{initial_heartbeat, keep_alive_stream},
+        kill_task::kill_task,
         reenqueue_orphaned::reenqueue_orphaned_stream,
     },
     sink::SurrealSink,
@@ -181,7 +181,9 @@ impl SurrealStorage<(), (), ()> {
 impl<T> SurrealStorage<T, (), ()> {
     /// Create a new storage using the queue named after the task type
     #[must_use]
-    pub fn new(conn: &Arc<Surreal<Any>>) -> SurrealStorage<T, JsonCodec<CompactType>, SurrealFetcher> {
+    pub fn new(
+        conn: &Arc<Surreal<Any>>,
+    ) -> SurrealStorage<T, JsonCodec<CompactType>, SurrealFetcher> {
         Self::new_with_config(conn, &Config::new(std::any::type_name::<T>()))
     }
 
@@ -258,7 +260,10 @@ impl<T, C, F> SurrealStorage<T, C, F> {
 }
 
 impl<Args, Decode, F> SurrealStorage<Args, Decode, F> {
-    fn heartbeat_stream(&self, worker: &WorkerContext) -> BoxStream<'static, Result<(), SurrealError>> {
+    fn heartbeat_stream(
+        &self,
+        worker: &WorkerContext,
+    ) -> BoxStream<'static, Result<(), SurrealError>> {
         let keep_alive = keep_alive_stream(
             self.conn.clone(),
             self.config.clone(),
@@ -317,9 +322,15 @@ impl<Args, Decode: Send + 'static> SurrealStorage<Args, Decode, SurrealLiveFetch
         let reg_worker = worker.clone();
         let instance = self.instance.clone();
         let register = stream::once(async move {
-            initial_heartbeat(&reg_conn, &reg_config, &reg_worker, "SurrealStorageWithEvents", &instance)
-                .await
-                .map(|()| None::<SurrealTask<CompactType>>)
+            initial_heartbeat(
+                &reg_conn,
+                &reg_config,
+                &reg_worker,
+                "SurrealStorageWithEvents",
+                &instance,
+            )
+            .await
+            .map(|()| None::<SurrealTask<CompactType>>)
         });
 
         let eager_fetcher: SurrealPollFetcher<CompactType, Decode> =

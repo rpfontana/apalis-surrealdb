@@ -24,10 +24,10 @@ pub mod lock_task;
 pub mod metrics;
 /// Insert a batch of tasks
 pub mod push_tasks;
-/// Register a worker with the backend
-pub mod register_worker;
 /// Re-enqueue tasks stranded by dead workers
 pub mod reenqueue_orphaned;
+/// Register a worker with the backend
+pub mod register_worker;
 /// Purge completed tasks from storage
 pub mod vacuum;
 /// Wait for tasks to reach a terminal state

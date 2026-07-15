@@ -25,8 +25,6 @@ async fn main() {
         worker.stop()?;
         Ok(())
     }
-    let worker = WorkerBuilder::new("worker-1")
-        .backend(backend)
-        .build(task);
+    let worker = WorkerBuilder::new("worker-1").backend(backend).build(task);
     worker.run().await.unwrap();
 }
