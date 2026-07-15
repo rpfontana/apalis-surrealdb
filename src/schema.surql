@@ -25,6 +25,7 @@ DEFINE TABLE IF NOT EXISTS worker SCHEMAFULL;
 DEFINE FIELD IF NOT EXISTS queue ON worker TYPE string;
 DEFINE FIELD IF NOT EXISTS storage_name ON worker TYPE string;
 DEFINE FIELD IF NOT EXISTS layers ON worker TYPE option<string>;
+DEFINE FIELD IF NOT EXISTS instance ON worker TYPE string DEFAULT '';
 DEFINE FIELD IF NOT EXISTS started_at ON worker TYPE datetime DEFAULT time::now();
 DEFINE FIELD IF NOT EXISTS last_seen ON worker TYPE datetime DEFAULT time::now();
 DEFINE INDEX IF NOT EXISTS worker_queue ON worker COLUMNS queue;

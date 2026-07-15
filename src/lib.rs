@@ -50,6 +50,10 @@ pub mod shared;
 /// Buffered sink that flushes queued tasks into SurrealDB
 pub mod sink;
 
+pub(crate) fn new_instance() -> Arc<str> {
+    Arc::from(Ulid::new().to_string())
+}
+
 const SCHEMA: &str = include_str!("schema.surql");
 
 const SCHEMA_VERSION: i64 = 1;
@@ -95,6 +99,8 @@ pub type CompactType = Vec<u8>;
 #[pin_project::pin_project]
 pub struct SurrealStorage<T, C, Fetcher> {
     conn: Arc<Surreal<Any>>,
+    /// Identifies this worker run
+    instance: Arc<str>,
     job_type: PhantomData<T>,
     codec: PhantomData<C>,
     config: Config,
@@ -119,6 +125,7 @@ impl<T, C, F: Clone> Clone for SurrealStorage<T, C, F> {
     fn clone(&self) -> Self {
         Self {
             conn: self.conn.clone(),
+            instance: self.instance.clone(),
             job_type: PhantomData,
             codec: self.codec,
             config: self.config.clone(),
@@ -164,6 +171,7 @@ impl<T> SurrealStorage<T, (), ()> {
     ) -> SurrealStorage<T, JsonCodec<CompactType>, SurrealFetcher> {
         SurrealStorage {
             conn: conn.clone(),
+            instance: new_instance(),
             job_type: PhantomData,
             codec: PhantomData,
             config: config.clone(),
@@ -180,6 +188,7 @@ impl<T> SurrealStorage<T, (), ()> {
     ) -> SurrealStorage<T, JsonCodec<CompactType>, SurrealLiveFetcher> {
         SurrealStorage {
             conn: conn.clone(),
+            instance: new_instance(),
             job_type: PhantomData,
             codec: PhantomData,
             config: config.clone(),
@@ -195,6 +204,7 @@ impl<T, C, F> SurrealStorage<T, C, F> {
         let sink = SurrealSink::new(&self.conn, &self.config);
         SurrealStorage {
             conn: self.conn,
+            instance: self.instance,
             job_type: PhantomData,
             codec: PhantomData,
             config: self.config,
@@ -218,7 +228,12 @@ impl<T, C, F> SurrealStorage<T, C, F> {
 
 impl<Args, Decode, F> SurrealStorage<Args, Decode, F> {
     fn heartbeat_stream(&self, worker: &WorkerContext) -> BoxStream<'static, Result<(), SurrealError>> {
-        let keep_alive = keep_alive_stream(self.conn.clone(), self.config.clone(), worker.clone());
+        let keep_alive = keep_alive_stream(
+            self.conn.clone(),
+            self.config.clone(),
+            worker.clone(),
+            self.instance.clone(),
+        );
         let reenqueue = reenqueue_orphaned_stream(
             self.conn.clone(),
             self.config.clone(),
@@ -229,7 +244,7 @@ impl<Args, Decode, F> SurrealStorage<Args, Decode, F> {
     }
 
     fn middleware_stack(&self) -> Stack<LockTaskLayer, AcknowledgeLayer<SurrealAck>> {
-        let lock = LockTaskLayer::new(self.conn.clone());
+        let lock = LockTaskLayer::new(self.conn.clone(), self.instance.clone());
         let ack = AcknowledgeLayer::new(SurrealAck::new(self.conn.clone()));
         Stack::new(lock, ack)
     }
@@ -244,8 +259,9 @@ impl<Args, Decode: Send + 'static, F> SurrealStorage<Args, Decode, F> {
         let conn = self.conn.clone();
         let config = self.config.clone();
         let registered = worker.clone();
+        let instance = self.instance.clone();
         let register = stream::once(async move {
-            initial_heartbeat(&conn, &config, &registered, "SurrealStorage")
+            initial_heartbeat(&conn, &config, &registered, "SurrealStorage", &instance)
                 .await
                 .map(|()| None::<SurrealTask<CompactType>>)
         });
@@ -253,6 +269,7 @@ impl<Args, Decode: Send + 'static, F> SurrealStorage<Args, Decode, F> {
             &self.conn,
             &self.config,
             worker,
+            self.instance.clone(),
         ))
     }
 }
@@ -267,17 +284,19 @@ impl<Args, Decode: Send + 'static> SurrealStorage<Args, Decode, SurrealLiveFetch
         let reg_conn = self.conn.clone();
         let reg_config = self.config.clone();
         let reg_worker = worker.clone();
+        let instance = self.instance.clone();
         let register = stream::once(async move {
-            initial_heartbeat(&reg_conn, &reg_config, &reg_worker, "SurrealStorageWithEvents")
+            initial_heartbeat(&reg_conn, &reg_config, &reg_worker, "SurrealStorageWithEvents", &instance)
                 .await
                 .map(|()| None::<SurrealTask<CompactType>>)
         });
 
         let eager_fetcher: SurrealPollFetcher<CompactType, Decode> =
-            SurrealPollFetcher::new(&self.conn, &self.config, &worker);
+            SurrealPollFetcher::new(&self.conn, &self.config, &worker, self.instance.clone());
 
         let fetch_conn = self.conn.clone();
         let fetch_config = self.config.clone();
+        let fetch_instance = self.instance.clone();
         let buffer_size = self.config.buffer_size();
         let lazy_fetcher = self
             .fetcher
@@ -285,8 +304,8 @@ impl<Args, Decode: Send + 'static> SurrealStorage<Args, Decode, SurrealLiveFetch
             .then(move |_| {
                 let conn = fetch_conn.clone();
                 let config = fetch_config.clone();
-                let worker = worker.clone();
-                async move { fetch_next(&conn, &config, &worker).await }
+                let instance = fetch_instance.clone();
+                async move { fetch_next(&conn, &config, &instance).await }
             })
             .flat_map(|res| match res {
                 Ok(tasks) => stream::iter(tasks).map(Ok).boxed(),

@@ -45,6 +45,7 @@ pub struct SurrealPollFetcher<Compact, Decode> {
     conn: Arc<Surreal<Any>>,
     config: Config,
     wrk: WorkerContext,
+    instance: Arc<str>,
     _marker: PhantomData<(Compact, Decode)>,
     #[pin]
     state: StreamState,
@@ -70,6 +71,7 @@ impl<Compact, Decode> Clone for SurrealPollFetcher<Compact, Decode> {
             conn: self.conn.clone(),
             config: self.config.clone(),
             wrk: self.wrk.clone(),
+            instance: self.instance.clone(),
             _marker: PhantomData,
             state: StreamState::Ready,
             delay_stream: None,
@@ -81,11 +83,17 @@ impl<Compact, Decode> Clone for SurrealPollFetcher<Compact, Decode> {
 impl<Decode> SurrealPollFetcher<CompactType, Decode> {
     /// Create a poll fetcher that claims batches for the given worker
     #[must_use]
-    pub fn new(conn: &Arc<Surreal<Any>>, config: &Config, wrk: &WorkerContext) -> Self {
+    pub fn new(
+        conn: &Arc<Surreal<Any>>,
+        config: &Config,
+        wrk: &WorkerContext,
+        instance: Arc<str>,
+    ) -> Self {
         Self {
             conn: conn.clone(),
             config: config.clone(),
             wrk: wrk.clone(),
+            instance,
             _marker: PhantomData,
             state: StreamState::Ready,
             delay_stream: None,
@@ -113,8 +121,8 @@ impl<Decode> Stream for SurrealPollFetcher<CompactType, Decode> {
                 StreamState::Ready => {
                     let conn = this.conn.clone();
                     let config = this.config.clone();
-                    let wrk = this.wrk.clone();
-                    let fetch = async move { fetch_next(&conn, &config, &wrk).await };
+                    let instance = this.instance.clone();
+                    let fetch = async move { fetch_next(&conn, &config, &instance).await };
                     this.state = StreamState::Fetch(fetch.boxed());
                 }
                 StreamState::Delay => {

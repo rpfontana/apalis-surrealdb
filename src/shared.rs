@@ -178,6 +178,7 @@ impl<Args, Decode: Codec<Args, Compact = CompactType>> MakeShared<Args>
         let sink = SurrealSink::new(&self.conn, &config);
         Ok(SurrealStorage {
             conn: self.conn.clone(),
+            instance: crate::new_instance(),
             job_type: PhantomData,
             codec: PhantomData,
             config,
@@ -245,7 +246,7 @@ where
     }
 
     fn middleware(&self) -> Self::Layer {
-        let lock = LockTaskLayer::new(self.conn.clone());
+        let lock = LockTaskLayer::new(self.conn.clone(), self.instance.clone());
         let ack = AcknowledgeLayer::new(SurrealAck::new(self.conn.clone()));
         Stack::new(ack, lock)
     }
@@ -294,12 +295,13 @@ impl<Args, Decode: Send + 'static> SurrealStorage<Args, Decode, SharedFetcher<Co
         let conn = self.conn.clone();
         let config = self.config.clone();
         let registered = worker.clone();
+        let instance = self.instance.clone();
         let register = stream::once(async move {
-            initial_heartbeat(&conn, &config, &registered, "SharedSurrealStorage")
+            initial_heartbeat(&conn, &config, &registered, "SharedSurrealStorage", &instance)
                 .await
                 .map(|()| None::<SurrealTask<CompactType>>)
         });
-        let eager = SurrealPollFetcher::<CompactType, Decode>::new(&self.conn, &self.config, worker)
+        let eager = SurrealPollFetcher::<CompactType, Decode>::new(&self.conn, &self.config, worker, self.instance.clone())
             .boxed();
         let lazy = self.fetcher.map(|task| Ok(Some(task))).boxed();
         register.chain(select(lazy, eager))

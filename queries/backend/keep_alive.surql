@@ -1,1 +1,1 @@
-UPDATE $worker SET last_seen = time::now() WHERE queue = $queue RETURN AFTER;
+UPDATE $worker SET last_seen = time::now() WHERE queue = $queue AND instance = $instance RETURN AFTER;

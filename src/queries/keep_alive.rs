@@ -22,6 +22,7 @@ pub async fn keep_alive(
     conn: &Arc<Surreal<Any>>,
     config: &Config,
     worker: &WorkerContext,
+    instance: &str,
 ) -> Result<(), SurrealError> {
     let name = worker.name().to_owned();
     let id = RecordId::new(WORKER_TABLE, name.clone());
@@ -29,6 +30,7 @@ pub async fn keep_alive(
         .query(KEEP_ALIVE)
         .bind(("worker", id))
         .bind(("queue", config.queue().to_string()))
+        .bind(("instance", instance.to_owned()))
         .await?;
     let updated: Vec<Value> = response.take(0)?;
     if updated.is_empty() {
@@ -43,9 +45,10 @@ pub async fn initial_heartbeat(
     config: &Config,
     worker: &WorkerContext,
     storage_name: &str,
+    instance: &str,
 ) -> Result<(), SurrealError> {
     reenqueue_orphaned(conn, config).await?;
-    register_worker(conn, config, worker, storage_name).await?;
+    register_worker(conn, config, worker, storage_name, instance).await?;
     Ok(())
 }
 
@@ -54,14 +57,16 @@ pub fn keep_alive_stream(
     conn: Arc<Surreal<Any>>,
     config: Config,
     worker: WorkerContext,
+    instance: Arc<str>,
 ) -> impl Stream<Item = Result<(), SurrealError>> + Send {
     stream::unfold((), move |()| {
         let conn = conn.clone();
         let config = config.clone();
         let worker = worker.clone();
+        let instance = instance.clone();
         async move {
             Delay::new(*config.keep_alive()).await;
-            let res = keep_alive(&conn, &config, &worker).await;
+            let res = keep_alive(&conn, &config, &worker, &instance).await;
             Some((res, ()))
         }
     })

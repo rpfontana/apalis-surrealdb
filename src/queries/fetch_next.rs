@@ -1,4 +1,3 @@
-use apalis_core::worker::context::WorkerContext;
 use apalis_sql::TaskRow;
 use surrealdb::{Surreal, engine::any::Any};
 use ulid::Ulid;
@@ -18,11 +17,11 @@ const FETCH_NEXT: &str = include_str!(concat!(
 pub async fn fetch_next(
     conn: &Surreal<Any>,
     config: &Config,
-    worker: &WorkerContext,
+    instance: &str,
 ) -> Result<Vec<SurrealTask<CompactType>>, SurrealError> {
     let queue = config.queue().to_string();
     let limit = config.buffer_size() as i64;
-    let worker = worker.name().to_string();
+    let worker = instance.to_owned();
 
     for _ in 0..MAX_TX_RETRIES {
         let mut response = conn

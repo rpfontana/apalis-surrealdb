@@ -3,7 +3,7 @@ use apalis_core::{
     error::BoxDynError,
     layers::{Layer, Service},
     task::Parts,
-    worker::{context::WorkerContext, ext::ack::Acknowledge},
+    worker::ext::ack::Acknowledge,
 };
 use futures::{FutureExt, future::BoxFuture};
 use serde::Serialize;
@@ -60,12 +60,13 @@ impl<Res: Serialize + 'static> Acknowledge<Res, SurrealContext, Ulid> for Surrea
 #[derive(Clone, Debug)]
 pub struct LockTaskLayer {
     conn: Arc<Surreal<Any>>,
+    instance: Arc<str>,
 }
 
 impl LockTaskLayer {
     #[must_use]
-    pub fn new(conn: Arc<Surreal<Any>>) -> Self {
-        Self { conn }
+    pub fn new(conn: Arc<Surreal<Any>>, instance: Arc<str>) -> Self {
+        Self { conn, instance }
     }
 }
 
@@ -76,6 +77,7 @@ impl<S> Layer<S> for LockTaskLayer {
         LockTaskService {
             inner,
             conn: self.conn.clone(),
+            instance: self.instance.clone(),
         }
     }
 }
@@ -84,6 +86,7 @@ impl<S> Layer<S> for LockTaskLayer {
 pub struct LockTaskService<S> {
     inner: S,
     conn: Arc<Surreal<Any>>,
+    instance: Arc<str>,
 }
 
 impl<S, Args> Service<SurrealTask<Args>> for LockTaskService<S>
@@ -103,15 +106,8 @@ where
 
     fn call(&mut self, mut req: SurrealTask<Args>) -> Self::Future {
         let conn = self.conn.clone();
-        let worker = req
-            .parts
-            .data
-            .get::<WorkerContext>()
-            .map(|w| w.name().to_owned());
+        let worker = self.instance.to_string();
         let task_id = req.parts.task_id.map(|id| *id.inner());
-        let Some(worker) = worker else {
-            return async { Err(SurrealError::MissingWorkerContext.into()) }.boxed();
-        };
         let Some(task_id) = task_id else {
             return async { Err(SurrealError::MissingTaskId.into()) }.boxed();
         };

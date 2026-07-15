@@ -1,13 +1,13 @@
-LET $stale = SELECT VALUE record::id(id) FROM worker
-    WHERE queue = $queue AND last_seen < time::now() - duration::from_secs($dur);
+LET $live = SELECT VALUE instance FROM worker
+    WHERE queue = $queue AND last_seen >= time::now() - duration::from_secs($dur);
 UPDATE job SET
     status = 'Pending',
     attempts = attempts + 1,
     lock_by = NONE,
     lock_at = NONE,
     done_at = NONE,
-    last_result = { Err: 'Re-enqueued due to worker heartbeat timeout.' }
+    last_result = { Err: 'Re-enqueued: locking worker instance is no longer live.' }
     WHERE queue = $queue
-      AND ((status IN ['Queued', 'Running'] AND lock_by IN $stale)
+      AND ((status IN ['Queued', 'Running'] AND lock_by != NONE AND lock_by NOTINSIDE $live)
            OR (status = 'Queued' AND lock_by IS NONE AND lock_at != NONE
                AND lock_at <= time::now() - duration::from_secs($dur)));

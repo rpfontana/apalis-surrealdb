@@ -16,6 +16,7 @@ pub async fn register_worker(
     config: &Config,
     worker: &WorkerContext,
     storage_name: &str,
+    instance: &str,
 ) -> Result<(), SurrealError> {
     let name = worker.name().to_owned();
     let id = RecordId::new(WORKER_TABLE, name.clone());
@@ -27,6 +28,7 @@ pub async fn register_worker(
         .bind(("queue", config.queue().to_string()))
         .bind(("storage", storage_name.to_owned()))
         .bind(("layers", worker.get_service().to_owned()))
+        .bind(("instance", instance.to_owned()))
         .bind(("keep_alive", keep_alive))
         .await;
 
