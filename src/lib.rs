@@ -29,9 +29,12 @@ pub use crate::ack::{LockTaskLayer, SurrealAck};
 pub use crate::errors::SurrealError;
 pub use crate::fetcher::{SurrealFetcher, SurrealLiveFetcher, SurrealPollFetcher};
 pub use crate::shared::{SharedSurrealError, SharedSurrealStorage};
+use surrealdb::types::RecordId;
+
 use crate::{
     queries::{
         fetch_next::fetch_next,
+        kill_task::kill_task,
         keep_alive::{initial_heartbeat, keep_alive_stream},
         reenqueue_orphaned::reenqueue_orphaned_stream,
     },
@@ -49,6 +52,34 @@ pub mod queries;
 pub mod shared;
 /// Buffered sink that flushes queued tasks into SurrealDB
 pub mod sink;
+
+/// Decode a claimed task's args, parking it instead of failing the stream
+async fn decode_or_kill<Args, Decode>(
+    conn: &Arc<Surreal<Any>>,
+    res: Result<Option<SurrealTask<CompactType>>, SurrealError>,
+) -> Result<Option<SurrealTask<Args>>, SurrealError>
+where
+    Decode: Codec<Args, Compact = CompactType>,
+    Decode::Error: std::error::Error + Send + Sync + 'static,
+{
+    let Some(task) = res? else {
+        return Ok(None);
+    };
+    let task_id = task.parts.task_id;
+    match task.try_map(|t| Decode::decode(&t)) {
+        Ok(task) => Ok(Some(task)),
+        Err(e) => {
+            log::error!("Killing task {task_id:?} with args this codec cannot decode: {e}");
+            if let Some(id) = task_id {
+                let id = RecordId::new(JOB_TABLE, id.to_string());
+                if let Err(e) = kill_task(conn, &id, &e.to_string()).await {
+                    log::error!("Failed to kill undecodable task: {e}");
+                }
+            }
+            Ok(None)
+        }
+    }
+}
 
 pub(crate) fn new_instance() -> Arc<str> {
     Arc::from(Ulid::new().to_string())
@@ -340,14 +371,11 @@ where
     }
 
     fn poll(self, worker: &WorkerContext) -> Self::Stream {
+        let conn = self.conn.clone();
         self.poll_default(worker)
-            .map(|a| match a {
-                Ok(Some(task)) => Ok(Some(
-                    task.try_map(|t| Decode::decode(&t))
-                        .map_err(|e| SurrealError::Decode(e.into()))?,
-                )),
-                Ok(None) => Ok(None),
-                Err(e) => Err(e),
+            .then(move |a| {
+                let conn = conn.clone();
+                async move { decode_or_kill::<Args, Decode>(&conn, a).await }
             })
             .boxed()
     }
@@ -396,14 +424,11 @@ where
     }
 
     fn poll(self, worker: &WorkerContext) -> Self::Stream {
+        let conn = self.conn.clone();
         self.poll_with_listener(worker)
-            .map(|a| match a {
-                Ok(Some(task)) => Ok(Some(
-                    task.try_map(|t| Decode::decode(&t))
-                        .map_err(|e| SurrealError::Decode(e.into()))?,
-                )),
-                Ok(None) => Ok(None),
-                Err(e) => Err(e),
+            .then(move |a| {
+                let conn = conn.clone();
+                async move { decode_or_kill::<Args, Decode>(&conn, a).await }
             })
             .boxed()
     }

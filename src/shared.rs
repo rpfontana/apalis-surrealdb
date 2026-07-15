@@ -252,14 +252,11 @@ where
     }
 
     fn poll(self, worker: &WorkerContext) -> Self::Stream {
+        let conn = self.conn.clone();
         self.poll_shared(worker)
-            .map(|a| match a {
-                Ok(Some(task)) => Ok(Some(
-                    task.try_map(|t| Decode::decode(&t))
-                        .map_err(|e| SurrealError::Decode(e.into()))?,
-                )),
-                Ok(None) => Ok(None),
-                Err(e) => Err(e),
+            .then(move |a| {
+                let conn = conn.clone();
+                async move { crate::decode_or_kill::<Args, Decode>(&conn, a).await }
             })
             .boxed()
     }

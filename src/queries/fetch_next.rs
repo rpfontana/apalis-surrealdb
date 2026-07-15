@@ -5,7 +5,7 @@ use ulid::Ulid;
 use crate::{
     CompactType, Config, SurrealError, SurrealTask,
     from_row::SurrealTaskRow,
-    queries::{MAX_TX_RETRIES, is_retryable_conflict},
+    queries::{MAX_TX_RETRIES, is_retryable_conflict, kill_task::kill_task},
 };
 
 const FETCH_NEXT: &str = include_str!(concat!(
@@ -39,13 +39,25 @@ pub async fn fetch_next(
         }
         // BEGIN and COMMIT each occupy a result index, so the UPDATE is at 2
         let rows: Vec<SurrealTaskRow> = response.take(2)?;
-        return rows
-            .into_iter()
-            .map(|row| {
-                let task_row: TaskRow = row.try_into()?;
-                Ok(task_row.try_into_task_compact::<Ulid, Surreal<Any>>()?)
-            })
-            .collect();
+        let mut tasks = Vec::with_capacity(rows.len());
+        for row in rows {
+            let id = row.id.clone();
+            match decode_row(row) {
+                Ok(task) => tasks.push(task),
+                Err(e) => {
+                    log::error!("Killing task {id:?} the worker cannot decode: {e}");
+                    if let Err(e) = kill_task(conn, &id, &e.to_string()).await {
+                        log::error!("Failed to kill undecodable task {id:?}: {e}");
+                    }
+                }
+            }
+        }
+        return Ok(tasks);
     }
     Ok(Vec::new())
+}
+
+fn decode_row(row: SurrealTaskRow) -> Result<SurrealTask<CompactType>, SurrealError> {
+    let task_row: TaskRow = row.try_into()?;
+    Ok(task_row.try_into_task_compact::<Ulid, Surreal<Any>>()?)
 }

@@ -10,6 +10,8 @@ pub mod fetch_next;
 pub mod fetch_next_shared;
 /// Keep workers alive by refreshing their heartbeat
 pub mod keep_alive;
+/// Park a task that can never run
+pub mod kill_task;
 /// List queues with their statistics
 pub mod list_queues;
 /// List tasks in a queue
@@ -35,6 +37,8 @@ pub(crate) const MAX_TX_RETRIES: usize = 5;
 
 /// A transaction that lost an optimistic-concurrency race and is safe to replay
 pub(crate) fn is_retryable_conflict(err: &surrealdb::Error) -> bool {
-    matches!(err.query_details(), Some(QueryError::TransactionConflict))
-        || err.message().contains("Transaction conflict")
+    matches!(
+        err.query_details(),
+        Some(QueryError::TransactionConflict | QueryError::NotExecuted)
+    ) || err.message().contains("Transaction conflict")
 }
