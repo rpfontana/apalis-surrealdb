@@ -17,7 +17,7 @@ use apalis_core::{
 use futures::{
     FutureExt, StreamExt,
     future::BoxFuture,
-    stream::{BoxStream, Stream},
+    stream::Stream,
 };
 use surrealdb::{
     Notification, Surreal,
@@ -173,8 +173,15 @@ impl<Compact, Decode> SurrealPollFetcher<Compact, Decode> {
     }
 }
 
-type NotificationStream = BoxStream<'static, Result<Notification<Value>, surrealdb::Error>>;
-type SubscribeFuture = BoxFuture<'static, Result<(Arc<Surreal<Any>>, NotificationStream), surrealdb::Error>>;
+type NotificationStream =
+    Pin<Box<dyn Stream<Item = Result<Notification<Value>, surrealdb::Error>> + Send + Sync>>;
+type SubscribeFuture = Pin<
+    Box<
+        dyn Future<Output = Result<(Arc<Surreal<Any>>, NotificationStream), surrealdb::Error>>
+            + Send
+            + Sync,
+    >,
+>;
 
 enum LiveState {
     Init,
@@ -226,9 +233,9 @@ impl Stream for SurrealLiveFetcher {
                     let subscribe = async move {
                         let stream: surrealdb::Stream<Vec<Value>> =
                             conn.select(JOB_TABLE).live().await?;
-                        Ok((conn, stream.boxed()))
+                        Ok((conn, Box::pin(stream) as NotificationStream))
                     };
-                    this.state = LiveState::Subscribing(subscribe.boxed());
+                    this.state = LiveState::Subscribing(Box::pin(subscribe));
                 }
                 LiveState::Subscribing(fut) => match fut.poll_unpin(cx) {
                     Poll::Pending => return Poll::Pending,
