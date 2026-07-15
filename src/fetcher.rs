@@ -42,7 +42,7 @@ enum StreamState {
 /// Poll-strategy driven fetcher that claims batches of due tasks from SurrealDB
 #[pin_project::pin_project]
 pub struct SurrealPollFetcher<Compact, Decode> {
-    conn: Surreal<Any>,
+    conn: Arc<Surreal<Any>>,
     config: Config,
     wrk: WorkerContext,
     _marker: PhantomData<(Compact, Decode)>,
@@ -81,7 +81,7 @@ impl<Compact, Decode> Clone for SurrealPollFetcher<Compact, Decode> {
 impl<Decode> SurrealPollFetcher<CompactType, Decode> {
     /// Create a poll fetcher that claims batches for the given worker
     #[must_use]
-    pub fn new(conn: &Surreal<Any>, config: &Config, wrk: &WorkerContext) -> Self {
+    pub fn new(conn: &Arc<Surreal<Any>>, config: &Config, wrk: &WorkerContext) -> Self {
         Self {
             conn: conn.clone(),
             config: config.clone(),
@@ -174,25 +174,25 @@ impl<Compact, Decode> SurrealPollFetcher<Compact, Decode> {
 }
 
 type NotificationStream = BoxStream<'static, Result<Notification<Value>, surrealdb::Error>>;
-type SubscribeFuture = BoxFuture<'static, Result<(Surreal<Any>, NotificationStream), surrealdb::Error>>;
+type SubscribeFuture = BoxFuture<'static, Result<(Arc<Surreal<Any>>, NotificationStream), surrealdb::Error>>;
 
 enum LiveState {
     Init,
     Subscribing(SubscribeFuture),
     // the subscribing client is held so its session, and the live query, outlive the notification stream
-    Active(#[allow(dead_code)] Surreal<Any>, NotificationStream),
+    Active(#[allow(dead_code)] Arc<Surreal<Any>>, NotificationStream),
 }
 
 /// Live-query fetcher that wakes the backend when a task is created on the `job` table
 pub struct SurrealLiveFetcher {
-    conn: Surreal<Any>,
+    conn: Arc<Surreal<Any>>,
     state: LiveState,
 }
 
 impl SurrealLiveFetcher {
     /// Create a live-query fetcher over the given connection
     #[must_use]
-    pub fn new(conn: &Surreal<Any>) -> Self {
+    pub fn new(conn: &Arc<Surreal<Any>>) -> Self {
         Self {
             conn: conn.clone(),
             state: LiveState::Init,

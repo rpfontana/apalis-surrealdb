@@ -1,3 +1,4 @@
+use std::sync::Arc;
 use apalis_core::{timer::Delay, worker::context::WorkerContext};
 use futures::{Stream, stream};
 use surrealdb::{
@@ -18,7 +19,7 @@ const KEEP_ALIVE: &str = include_str!(concat!(
 
 /// Refresh the worker heartbeat so it is not treated as orphaned
 pub async fn keep_alive(
-    conn: &Surreal<Any>,
+    conn: &Arc<Surreal<Any>>,
     config: &Config,
     worker: &WorkerContext,
 ) -> Result<(), SurrealError> {
@@ -38,7 +39,7 @@ pub async fn keep_alive(
 
 /// Re-enqueue orphaned tasks then register the worker
 pub async fn initial_heartbeat(
-    conn: &Surreal<Any>,
+    conn: &Arc<Surreal<Any>>,
     config: &Config,
     worker: &WorkerContext,
     storage_name: &str,
@@ -50,7 +51,7 @@ pub async fn initial_heartbeat(
 
 /// Emit a keep-alive at every keep-alive interval
 pub fn keep_alive_stream(
-    conn: Surreal<Any>,
+    conn: Arc<Surreal<Any>>,
     config: Config,
     worker: WorkerContext,
 ) -> impl Stream<Item = Result<(), SurrealError>> + Send {

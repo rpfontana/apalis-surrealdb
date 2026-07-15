@@ -42,7 +42,7 @@ use apalis_surrealdb::{SurrealStorage, connect};
 
 #[tokio::main]
 async fn main() {
-    let conn = connect("mem://").await.unwrap();
+    let conn = std::sync::Arc::new(connect("mem://").await.unwrap());
     conn.use_ns("apalis").use_db("apalis").await.unwrap();
     SurrealStorage::setup(&conn).await.unwrap();
 
@@ -75,7 +75,7 @@ use apalis_surrealdb::{Config, SurrealStorage, connect};
 
 #[tokio::main]
 async fn main() {
-    let conn = connect("ws://localhost:8000").await.unwrap();
+    let conn = std::sync::Arc::new(connect("ws://localhost:8000").await.unwrap());
     conn.use_ns("apalis").use_db("apalis").await.unwrap();
     SurrealStorage::setup(&conn).await.unwrap();
 
@@ -105,7 +105,7 @@ use apalis_surrealdb::{SharedSurrealStorage, SurrealStorage, connect};
 
 #[tokio::main]
 async fn main() {
-    let conn = connect("mem://").await.unwrap();
+    let conn = std::sync::Arc::new(connect("mem://").await.unwrap());
     conn.use_ns("apalis").use_db("apalis").await.unwrap();
     SurrealStorage::setup(&conn).await.unwrap();
 

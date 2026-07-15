@@ -1,3 +1,4 @@
+use std::sync::Arc;
 use apalis_core::{
     error::BoxDynError,
     layers::{Layer, Service},
@@ -19,12 +20,12 @@ use crate::{
 
 #[derive(Clone, Debug)]
 pub struct SurrealAck {
-    conn: Surreal<Any>,
+    conn: Arc<Surreal<Any>>,
 }
 
 impl SurrealAck {
     #[must_use]
-    pub fn new(conn: Surreal<Any>) -> Self {
+    pub fn new(conn: Arc<Surreal<Any>>) -> Self {
         Self { conn }
     }
 }
@@ -58,12 +59,12 @@ impl<Res: Serialize + 'static> Acknowledge<Res, SurrealContext, Ulid> for Surrea
 
 #[derive(Clone, Debug)]
 pub struct LockTaskLayer {
-    conn: Surreal<Any>,
+    conn: Arc<Surreal<Any>>,
 }
 
 impl LockTaskLayer {
     #[must_use]
-    pub fn new(conn: Surreal<Any>) -> Self {
+    pub fn new(conn: Arc<Surreal<Any>>) -> Self {
         Self { conn }
     }
 }
@@ -82,7 +83,7 @@ impl<S> Layer<S> for LockTaskLayer {
 #[derive(Clone, Debug)]
 pub struct LockTaskService<S> {
     inner: S,
-    conn: Surreal<Any>,
+    conn: Arc<Surreal<Any>>,
 }
 
 impl<S, Args> Service<SurrealTask<Args>> for LockTaskService<S>

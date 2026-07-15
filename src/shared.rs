@@ -36,7 +36,7 @@ type Registry = Arc<Mutex<HashMap<String, Sender<SurrealTask<CompactType>>>>>;
 
 /// A SurrealDB storage whose single connection is shared across workers of different queues
 pub struct SharedSurrealStorage<Decode> {
-    conn: Surreal<Any>,
+    conn: Arc<Surreal<Any>>,
     registry: Registry,
     drive: Shared<BoxFuture<'static, ()>>,
     _marker: PhantomData<Decode>,
@@ -73,13 +73,13 @@ impl<Decode> SharedSurrealStorage<Decode> {
 impl SharedSurrealStorage<JsonCodec<CompactType>> {
     /// Create a shared storage over an existing SurrealDB connection
     #[must_use]
-    pub fn new(conn: &Surreal<Any>) -> Self {
+    pub fn new(conn: &Arc<Surreal<Any>>) -> Self {
         Self::new_with_codec(conn)
     }
 
     /// Create a shared storage over an existing connection using a specific codec
     #[must_use]
-    pub fn new_with_codec<C>(conn: &Surreal<Any>) -> SharedSurrealStorage<C> {
+    pub fn new_with_codec<C>(conn: &Arc<Surreal<Any>>) -> SharedSurrealStorage<C> {
         let registry: Registry = Arc::new(Mutex::new(HashMap::new()));
         let fallback = *Config::default().keep_alive();
         let drive = drive_registry(conn.clone(), registry.clone(), fallback)
@@ -95,7 +95,7 @@ impl SharedSurrealStorage<JsonCodec<CompactType>> {
 }
 
 // fan claimed tasks out to the perqueue channels, waking on live notifications or a fallback tick
-async fn drive_registry(conn: Surreal<Any>, registry: Registry, fallback: Duration) {
+async fn drive_registry(conn: Arc<Surreal<Any>>, registry: Registry, fallback: Duration) {
     let live = SurrealLiveFetcher::new(&conn);
     let ticks = stream::unfold((), move |()| async move {
         Delay::new(fallback).await;

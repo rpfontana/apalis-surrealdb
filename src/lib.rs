@@ -1,5 +1,6 @@
 #![doc = include_str!("../README.md")]
 
+use std::sync::Arc;
 use std::{fmt, marker::PhantomData};
 
 use apalis_codec::json::JsonCodec;
@@ -71,7 +72,7 @@ pub type CompactType = Vec<u8>;
     setup = r#"
         # {
         #   use apalis_surrealdb::{SurrealStorage, connect};
-        #   let conn = connect("mem://").await.unwrap();
+        #   let conn = std::sync::Arc::new(connect("mem://").await.unwrap());
         #   conn.use_ns("test").use_db("test").await.unwrap();
         #   SurrealStorage::setup(&conn).await.unwrap();
         #   SurrealStorage::new(&conn)
@@ -93,7 +94,7 @@ pub type CompactType = Vec<u8>;
 }]
 #[pin_project::pin_project]
 pub struct SurrealStorage<T, C, Fetcher> {
-    conn: Surreal<Any>,
+    conn: Arc<Surreal<Any>>,
     job_type: PhantomData<T>,
     codec: PhantomData<C>,
     config: Config,
@@ -129,7 +130,7 @@ impl<T, C, F: Clone> Clone for SurrealStorage<T, C, F> {
 
 impl SurrealStorage<(), (), ()> {
     /// Define the tables, fields and indexes required by the backend.
-    pub async fn setup(conn: &Surreal<Any>) -> Result<(), SurrealError> {
+    pub async fn setup(conn: &Arc<Surreal<Any>>) -> Result<(), SurrealError> {
         conn.query(SCHEMA).await?.check()?;
         conn.query("UPSERT apalis_meta:schema SET version = $version")
             .bind(("version", SCHEMA_VERSION))
@@ -142,14 +143,14 @@ impl SurrealStorage<(), (), ()> {
 impl<T> SurrealStorage<T, (), ()> {
     /// Create a new storage using the queue named after the task type
     #[must_use]
-    pub fn new(conn: &Surreal<Any>) -> SurrealStorage<T, JsonCodec<CompactType>, SurrealFetcher> {
+    pub fn new(conn: &Arc<Surreal<Any>>) -> SurrealStorage<T, JsonCodec<CompactType>, SurrealFetcher> {
         Self::new_with_config(conn, &Config::new(std::any::type_name::<T>()))
     }
 
     /// Create a new storage bound to a specific queue
     #[must_use]
     pub fn new_in_queue(
-        conn: &Surreal<Any>,
+        conn: &Arc<Surreal<Any>>,
         queue: &str,
     ) -> SurrealStorage<T, JsonCodec<CompactType>, SurrealFetcher> {
         Self::new_with_config(conn, &Config::new(queue))
@@ -158,7 +159,7 @@ impl<T> SurrealStorage<T, (), ()> {
     /// Create a new storage from an explicit [`Config`]
     #[must_use]
     pub fn new_with_config(
-        conn: &Surreal<Any>,
+        conn: &Arc<Surreal<Any>>,
         config: &Config,
     ) -> SurrealStorage<T, JsonCodec<CompactType>, SurrealFetcher> {
         SurrealStorage {
@@ -174,7 +175,7 @@ impl<T> SurrealStorage<T, (), ()> {
     /// Create a storage that reacts to live-query notifications, needs a ws or embedded connection
     #[must_use]
     pub fn new_with_events(
-        conn: &Surreal<Any>,
+        conn: &Arc<Surreal<Any>>,
         config: &Config,
     ) -> SurrealStorage<T, JsonCodec<CompactType>, SurrealLiveFetcher> {
         SurrealStorage {

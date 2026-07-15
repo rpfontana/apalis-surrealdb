@@ -1,3 +1,4 @@
+use std::sync::Arc;
 use std::time::Duration;
 
 use apalis_core::timer::Delay;
@@ -12,7 +13,7 @@ const REENQUEUE_ORPHANED: &str = include_str!(concat!(
 ));
 
 /// Return tasks held by timed-out workers to the queue and report how many
-pub async fn reenqueue_orphaned(conn: &Surreal<Any>, config: &Config) -> Result<u64, SurrealError> {
+pub async fn reenqueue_orphaned(conn: &Arc<Surreal<Any>>, config: &Config) -> Result<u64, SurrealError> {
     let dead_for = config.reenqueue_orphaned_after().as_secs() as i64;
     let mut response = conn
         .query(REENQUEUE_ORPHANED)
@@ -29,7 +30,7 @@ pub async fn reenqueue_orphaned(conn: &Surreal<Any>, config: &Config) -> Result<
 
 /// Re-enqueue orphaned tasks at a fixed interval
 pub fn reenqueue_orphaned_stream(
-    conn: Surreal<Any>,
+    conn: Arc<Surreal<Any>>,
     config: Config,
     interval: Duration,
 ) -> impl Stream<Item = Result<u64, SurrealError>> + Send {

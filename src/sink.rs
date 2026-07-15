@@ -21,7 +21,7 @@ type FlushFuture = BoxFuture<'static, Result<(), Arc<SurrealError>>>;
 #[pin_project::pin_project]
 #[derive(Debug)]
 pub struct SurrealSink<Args, Compact, Codec> {
-    conn: Surreal<Any>,
+    conn: Arc<Surreal<Any>>,
     config: Config,
     buffer: Vec<SurrealTask<Compact>>,
     #[pin]
@@ -32,7 +32,7 @@ pub struct SurrealSink<Args, Compact, Codec> {
 impl<Args, Compact, Codec> SurrealSink<Args, Compact, Codec> {
     /// Create a sink that flushes tasks to the given queue
     #[must_use]
-    pub fn new(conn: &Surreal<Any>, config: &Config) -> Self {
+    pub fn new(conn: &Arc<Surreal<Any>>, config: &Config) -> Self {
         Self {
             conn: conn.clone(),
             config: config.clone(),

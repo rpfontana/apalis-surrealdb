@@ -9,7 +9,7 @@ use apalis_surrealdb::{SurrealStorage, connect};
 async fn main() {
     let dedupe_key = "a5bc4337-7789-4feb-b421-89c7231bac10";
 
-    let conn = connect("mem://").await.unwrap();
+    let conn = std::sync::Arc::new(connect("mem://").await.unwrap());
     conn.use_ns("apalis").use_db("apalis").await.unwrap();
     SurrealStorage::setup(&conn).await.unwrap();
     let mut backend = SurrealStorage::new(&conn);
