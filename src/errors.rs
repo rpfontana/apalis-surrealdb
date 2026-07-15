@@ -16,9 +16,6 @@ pub enum SurrealError {
     #[error("Task not found: {0}")]
     TaskNotFound(String),
 
-    #[error("Worker already exists: {0}")]
-    WorkerAlreadyExists(String),
-
     #[error("Worker not found: {0}")]
     WorkerNotFound(String),
 
