@@ -8,10 +8,12 @@ use std::{
         atomic::{AtomicUsize, Ordering},
     },
     task::{Context, Poll},
+    time::Duration,
 };
 
 use apalis_core::{
     backend::poll_strategy::{PollContext, PollStrategyExt},
+    timer::Delay,
     worker::context::WorkerContext,
 };
 use futures::{FutureExt, StreamExt, future::BoxFuture, stream::Stream};
@@ -189,17 +191,22 @@ type SubscribeFuture = Pin<
     >,
 >;
 
+const BACKOFF_BASE: Duration = Duration::from_secs(1);
+const BACKOFF_CAP: Duration = Duration::from_secs(30);
+
 enum LiveState {
     Init,
     Subscribing(SubscribeFuture),
     // the subscribing client is held so its session, and the live query, outlive the notification stream
     Active(#[allow(dead_code)] Arc<Surreal<Any>>, NotificationStream),
+    Backoff(Delay),
 }
 
 /// Live-query fetcher that wakes the backend when a task is created on the `job` table
 pub struct SurrealLiveFetcher {
     conn: Arc<Surreal<Any>>,
     state: LiveState,
+    backoff: Duration,
 }
 
 impl SurrealLiveFetcher {
@@ -209,6 +216,7 @@ impl SurrealLiveFetcher {
         Self {
             conn: conn.clone(),
             state: LiveState::Init,
+            backoff: BACKOFF_BASE,
         }
     }
 }
@@ -249,21 +257,37 @@ impl Stream for SurrealLiveFetcher {
                         this.state = LiveState::Active(conn, stream);
                     }
                     Poll::Ready(Err(e)) => {
-                        log::warn!("Failed to subscribe to live query on {JOB_TABLE}: {e}");
-                        return Poll::Ready(None);
+                        log::error!(
+                            "Failed to subscribe to live query on {JOB_TABLE}: {e}; \
+                             real-time delivery degraded, retrying in {:?} while polling continues",
+                            this.backoff
+                        );
+                        this.state = LiveState::Backoff(Delay::new(this.backoff));
+                        this.backoff = (this.backoff * 2).min(BACKOFF_CAP);
                     }
                 },
                 LiveState::Active(_, stream) => match stream.poll_next_unpin(cx) {
                     Poll::Pending => return Poll::Pending,
-                    Poll::Ready(Some(Ok(n))) if n.action == Action::Create => {
-                        return Poll::Ready(Some(()));
+                    Poll::Ready(Some(Ok(n))) => {
+                        // a delivered notification proves the stream healthy
+                        this.backoff = BACKOFF_BASE;
+                        if n.action == Action::Create {
+                            return Poll::Ready(Some(()));
+                        }
                     }
-                    Poll::Ready(Some(Ok(_))) => {}
                     Poll::Ready(Some(Err(e))) => log::warn!("Live query notification error: {e}"),
                     Poll::Ready(None) => {
-                        log::warn!("Live query on {JOB_TABLE} ended, resubscribing");
-                        this.state = LiveState::Init;
+                        log::warn!(
+                            "Live query on {JOB_TABLE} ended, resubscribing in {:?}",
+                            this.backoff
+                        );
+                        this.state = LiveState::Backoff(Delay::new(this.backoff));
+                        this.backoff = (this.backoff * 2).min(BACKOFF_CAP);
                     }
+                },
+                LiveState::Backoff(delay) => match delay.poll_unpin(cx) {
+                    Poll::Pending => return Poll::Pending,
+                    Poll::Ready(()) => this.state = LiveState::Init,
                 },
             }
         }
