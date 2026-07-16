@@ -65,7 +65,7 @@ pub async fn fetch_next(
     })))
 }
 
-fn decode_row(row: SurrealTaskRow) -> Result<SurrealTask<CompactType>, SurrealError> {
+pub(crate) fn decode_row(row: SurrealTaskRow) -> Result<SurrealTask<CompactType>, SurrealError> {
     let task_row: TaskRow = row.try_into()?;
     Ok(task_row.try_into_task_compact::<Ulid, Surreal<Any>>()?)
 }

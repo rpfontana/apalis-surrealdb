@@ -1,11 +1,11 @@
-use apalis_sql::TaskRow;
 use surrealdb::{Surreal, engine::any::Any};
-use ulid::Ulid;
 
 use crate::{
     CompactType, SurrealError, SurrealTask,
     from_row::SurrealTaskRow,
-    queries::{MAX_TX_RETRIES, TxOutcome, classify_tx_errors},
+    queries::{
+        MAX_TX_RETRIES, TxOutcome, classify_tx_errors, fetch_next::decode_row, kill_task::kill_task,
+    },
 };
 
 const FETCH_NEXT_SHARED: &str = include_str!(concat!(
@@ -36,13 +36,20 @@ pub async fn fetch_next_shared(
         }
         // BEGIN and COMMIT each occupy a result index, so the UPDATE is at 2
         let rows: Vec<SurrealTaskRow> = response.take(2)?;
-        return rows
-            .into_iter()
-            .map(|row| {
-                let task_row: TaskRow = row.try_into()?;
-                Ok(task_row.try_into_task_compact::<Ulid, Surreal<Any>>()?)
-            })
-            .collect();
+        let mut tasks = Vec::with_capacity(rows.len());
+        for row in rows {
+            let id = row.id.clone();
+            match decode_row(row) {
+                Ok(task) => tasks.push(task),
+                Err(e) => {
+                    log::error!("Killing task {id:?} the worker cannot decode: {e}");
+                    if let Err(e) = kill_task(conn, &id, &e.to_string()).await {
+                        log::error!("Failed to kill undecodable task {id:?}: {e}");
+                    }
+                }
+            }
+        }
+        return Ok(tasks);
     }
     // surface the conflict after exhausting retries instead of faking an empty batch
     Err(SurrealError::Database(conflict.unwrap_or_else(|| {
