@@ -1,32 +1,39 @@
 use std::{
+    fmt,
     marker::PhantomData,
     pin::Pin,
     sync::Arc,
     task::{Context, Poll},
 };
 
-use futures::{
-    FutureExt, Sink,
-    future::{BoxFuture, Shared},
-};
+use futures::{FutureExt, Sink, future::BoxFuture};
 use surrealdb::{Surreal, engine::any::Any};
 
 use crate::{
     CompactType, Config, SurrealError, SurrealStorage, SurrealTask, queries::push_tasks::push_tasks,
 };
 
-type FlushFuture = BoxFuture<'static, Result<(), Arc<SurrealError>>>;
+type FlushFuture = BoxFuture<'static, Result<(), SurrealError>>;
 
 /// Buffered sink that flushes queued tasks into the SurrealDB backend
 #[pin_project::pin_project]
-#[derive(Debug)]
 pub struct SurrealSink<Args, Compact, Codec> {
     conn: Arc<Surreal<Any>>,
     config: Config,
     buffer: Vec<SurrealTask<Compact>>,
     #[pin]
-    flush_future: Option<Shared<FlushFuture>>,
+    flush_future: Option<FlushFuture>,
     _marker: PhantomData<(Args, Codec)>,
+}
+
+impl<Args, Compact, Codec> fmt::Debug for SurrealSink<Args, Compact, Codec> {
+    fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
+        f.debug_struct("SurrealSink")
+            .field("config", &self.config)
+            .field("buffered", &self.buffer.len())
+            .field("flushing", &self.flush_future.is_some())
+            .finish()
+    }
 }
 
 impl<Args, Compact, Codec> SurrealSink<Args, Compact, Codec> {
@@ -71,37 +78,30 @@ where
     }
 
     fn poll_flush(self: Pin<&mut Self>, cx: &mut Context<'_>) -> Poll<Result<(), Self::Error>> {
-        let mut this = self.project();
+        let sink = self.project().sink.get_mut();
 
-        if this.sink.flush_future.is_none() && this.sink.buffer.is_empty() {
-            return Poll::Ready(Ok(()));
-        }
-
-        if this.sink.flush_future.is_none() && !this.sink.buffer.is_empty() {
-            let conn = this.sink.conn.clone();
-            let config = this.sink.config.clone();
-            let buffer = std::mem::take(&mut this.sink.buffer);
-            let flush = async move { push_tasks(&conn, &config, buffer).await.map_err(Arc::new) };
-            this.sink.flush_future = Some((Box::pin(flush) as FlushFuture).shared());
-        }
-
-        if let Some(mut flush) = this.sink.flush_future.take() {
-            match flush.poll_unpin(cx) {
-                Poll::Ready(Ok(())) => Poll::Ready(Ok(())),
-                Poll::Ready(Err(err)) => {
-                    Poll::Ready(Err(Arc::into_inner(err).unwrap_or_else(|| {
-                        SurrealError::Database(surrealdb::Error::internal(
-                            "push flush future was unexpectedly shared".to_owned(),
-                        ))
-                    })))
-                }
-                Poll::Pending => {
-                    this.sink.flush_future = Some(flush);
-                    Poll::Pending
+        loop {
+            if let Some(flush) = sink.flush_future.as_mut() {
+                match flush.poll_unpin(cx) {
+                    Poll::Ready(Ok(())) => sink.flush_future = None,
+                    Poll::Ready(Err(err)) => {
+                        sink.flush_future = None;
+                        return Poll::Ready(Err(err));
+                    }
+                    Poll::Pending => return Poll::Pending,
                 }
             }
-        } else {
-            Poll::Ready(Ok(()))
+
+            if sink.buffer.is_empty() {
+                return Poll::Ready(Ok(()));
+            }
+
+            let conn = sink.conn.clone();
+            let config = sink.config.clone();
+            let buffer = std::mem::take(&mut sink.buffer);
+            sink.flush_future = Some(Box::pin(
+                async move { push_tasks(&conn, &config, buffer).await },
+            ));
         }
     }
 
