@@ -1,4 +1,5 @@
 use std::sync::Arc;
+use std::sync::Once;
 use std::time::Duration;
 
 use apalis_core::timer::Delay;
@@ -12,12 +13,30 @@ const REENQUEUE_ORPHANED: &str = include_str!(concat!(
     "/queries/backend/reenqueue_orphaned.surql"
 ));
 
+static CLAMP_WARN: Once = Once::new();
+
+/// Liveness window in seconds, floored at 2 * keep_alive so a worker mid-heartbeat is never judged dead
+fn effective_reenqueue_secs(config: &Config) -> i64 {
+    let after = config.reenqueue_orphaned_after();
+    let floor = config.keep_alive().saturating_mul(2);
+    if after < floor {
+        CLAMP_WARN.call_once(|| {
+            log::warn!(
+                "reenqueue_orphaned_after ({after:?}) < 2 * keep_alive ({:?}); clamping to {floor:?}",
+                *config.keep_alive()
+            );
+        });
+        return floor.as_secs() as i64;
+    }
+    after.as_secs() as i64
+}
+
 /// Return tasks held by timed-out workers to the queue and report how many
 pub async fn reenqueue_orphaned(
     conn: &Arc<Surreal<Any>>,
     config: &Config,
 ) -> Result<u64, SurrealError> {
-    let dead_for = config.reenqueue_orphaned_after().as_secs() as i64;
+    let dead_for = effective_reenqueue_secs(config);
     let mut response = conn
         .query(REENQUEUE_ORPHANED)
         .bind(("queue", config.queue().to_string()))
