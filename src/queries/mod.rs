@@ -1,3 +1,5 @@
+use std::collections::{BTreeMap, HashMap};
+
 use surrealdb::types::QueryError;
 
 /// Acknowledge a task on success or failure
@@ -35,10 +37,47 @@ pub mod wait_for;
 
 pub(crate) const MAX_TX_RETRIES: usize = 5;
 
-/// A transaction that lost an optimistic-concurrency race and is safe to replay
-pub(crate) fn is_retryable_conflict(err: &surrealdb::Error) -> bool {
-    matches!(
-        err.query_details(),
-        Some(QueryError::TransactionConflict | QueryError::NotExecuted)
-    ) || err.message().contains("Transaction conflict")
+/// What to do with a transaction attempt
+#[derive(Debug)]
+pub(crate) enum TxOutcome {
+    Retry(surrealdb::Error),
+    Fail(surrealdb::Error),
+}
+
+fn is_conflict(err: &surrealdb::Error) -> bool {
+    matches!(err.query_details(), Some(QueryError::TransactionConflict))
+        || err.message().contains("Transaction conflict")
+}
+
+fn is_not_executed(err: &surrealdb::Error) -> bool {
+    matches!(err.query_details(), Some(QueryError::NotExecuted))
+}
+
+/// Classify a BEGIN..COMMIT error set: siblings of a failed statement are `NotExecuted` noise, only the failing slot holds the real error
+pub(crate) fn classify_tx_errors(errors: HashMap<usize, surrealdb::Error>) -> Option<TxOutcome> {
+    if errors.is_empty() {
+        return None;
+    }
+    // BTreeMap so the surfaced error is the lowest slot, not HashMap order
+    let ordered: BTreeMap<usize, surrealdb::Error> = errors.into_iter().collect();
+    let mut first_conflict = None;
+    let mut first_real = None;
+    let mut first_not_executed = None;
+    for (_, err) in ordered {
+        if is_conflict(&err) {
+            first_conflict.get_or_insert(err);
+        } else if is_not_executed(&err) {
+            first_not_executed.get_or_insert(err);
+        } else {
+            first_real.get_or_insert(err);
+        }
+    }
+    if let Some(err) = first_real {
+        Some(TxOutcome::Fail(err))
+    } else if let Some(err) = first_conflict {
+        Some(TxOutcome::Retry(err))
+    } else {
+        // all NotExecuted: shouldn't happen, but fail rather than retry silently
+        first_not_executed.map(TxOutcome::Fail)
+    }
 }

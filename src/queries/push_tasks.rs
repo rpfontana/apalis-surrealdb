@@ -7,7 +7,7 @@ use ulid::Ulid;
 
 use crate::{
     CompactType, Config, JOB_TABLE, SurrealError, SurrealTask,
-    queries::{MAX_TX_RETRIES, is_retryable_conflict},
+    queries::{MAX_TX_RETRIES, TxOutcome, classify_tx_errors},
 };
 
 const PUSH_TASKS: &str = include_str!(concat!(
@@ -60,15 +60,11 @@ pub async fn push_tasks(
     let mut conflict = None;
     for _ in 0..MAX_TX_RETRIES {
         let mut response = conn.query(PUSH_TASKS).bind(("tasks", rows.clone())).await?;
-        let mut errors = response.take_errors().into_values();
-        if let Some(err) = errors.find(is_retryable_conflict) {
-            conflict = Some(err);
-            continue;
+        match classify_tx_errors(response.take_errors()) {
+            Some(TxOutcome::Retry(err)) => conflict = Some(err),
+            Some(TxOutcome::Fail(err)) => return Err(SurrealError::Database(err)),
+            None => return Ok(()),
         }
-        if let Some(err) = errors.next() {
-            return Err(SurrealError::Database(err));
-        }
-        return Ok(());
     }
     // surface the conflict after exhausting retries so the batch is not silently dropped
     Err(SurrealError::Database(conflict.unwrap_or_else(|| {

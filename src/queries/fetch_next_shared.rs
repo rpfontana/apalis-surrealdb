@@ -5,7 +5,7 @@ use ulid::Ulid;
 use crate::{
     CompactType, SurrealError, SurrealTask,
     from_row::SurrealTaskRow,
-    queries::{MAX_TX_RETRIES, is_retryable_conflict},
+    queries::{MAX_TX_RETRIES, TxOutcome, classify_tx_errors},
 };
 
 const FETCH_NEXT_SHARED: &str = include_str!(concat!(
@@ -19,18 +19,20 @@ pub async fn fetch_next_shared(
     queues: &[String],
     limit: i64,
 ) -> Result<Vec<SurrealTask<CompactType>>, SurrealError> {
+    let mut conflict = None;
     for _ in 0..MAX_TX_RETRIES {
         let mut response = conn
             .query(FETCH_NEXT_SHARED)
             .bind(("queues", queues.to_vec()))
             .bind(("limit", limit))
             .await?;
-        let errors = response.take_errors();
-        if errors.values().any(is_retryable_conflict) {
-            continue;
-        }
-        if let Some(err) = errors.into_values().next() {
-            return Err(SurrealError::Database(err));
+        match classify_tx_errors(response.take_errors()) {
+            Some(TxOutcome::Retry(err)) => {
+                conflict = Some(err);
+                continue;
+            }
+            Some(TxOutcome::Fail(err)) => return Err(SurrealError::Database(err)),
+            None => {}
         }
         // BEGIN and COMMIT each occupy a result index, so the UPDATE is at 2
         let rows: Vec<SurrealTaskRow> = response.take(2)?;
@@ -42,5 +44,11 @@ pub async fn fetch_next_shared(
             })
             .collect();
     }
-    Ok(Vec::new())
+    // surface the conflict after exhausting retries instead of faking an empty batch
+    Err(SurrealError::Database(conflict.unwrap_or_else(|| {
+        surrealdb::Error::query(
+            "Transaction conflict retries exhausted".to_owned(),
+            surrealdb::types::QueryError::TransactionConflict,
+        )
+    })))
 }
