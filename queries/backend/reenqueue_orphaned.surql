@@ -1,5 +1,5 @@
 LET $live = SELECT VALUE instance FROM worker
-    WHERE queue = $queue AND last_seen >= time::now() - duration::from_secs($dur);
+    WHERE queue = $queue AND last_seen >= time::now() - duration::from_millis($dur);
 UPDATE job SET
     status = 'Pending',
     attempts = attempts + 1,
@@ -9,9 +9,9 @@ UPDATE job SET
     last_result = { Err: 'Re-enqueued: locking worker instance is no longer live.' }
     WHERE queue = $queue
       AND lock_at != NONE
-      AND lock_at <= time::now() - duration::from_secs($dur)
+      AND lock_at <= time::now() - duration::from_millis($dur)
       AND ((status IN ['Queued', 'Running'] AND lock_by != NONE AND lock_by NOTINSIDE $live)
            OR (status = 'Queued' AND lock_by IS NONE));
 
 DELETE worker WHERE queue = $queue
-    AND last_seen < time::now() - duration::from_secs($dur * 4);
+    AND last_seen < time::now() - duration::from_millis($dur * 4);

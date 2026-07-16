@@ -15,8 +15,8 @@ const REENQUEUE_ORPHANED: &str = include_str!(concat!(
 
 static CLAMP_WARN: Once = Once::new();
 
-/// Liveness window in seconds, floored at 2 * keep_alive so a worker mid-heartbeat is never judged dead
-fn effective_reenqueue_secs(config: &Config) -> i64 {
+/// Liveness window in millis, floored at 2 * keep_alive so a worker mid-heartbeat is never judged dead
+fn effective_reenqueue_millis(config: &Config) -> i64 {
     let after = config.reenqueue_orphaned_after();
     let floor = config.keep_alive().saturating_mul(2);
     if after < floor {
@@ -26,9 +26,9 @@ fn effective_reenqueue_secs(config: &Config) -> i64 {
                 *config.keep_alive()
             );
         });
-        return floor.as_secs() as i64;
+        return floor.as_millis() as i64;
     }
-    after.as_secs() as i64
+    after.as_millis() as i64
 }
 
 /// Return tasks held by timed-out workers to the queue and report how many
@@ -36,7 +36,7 @@ pub async fn reenqueue_orphaned(
     conn: &Arc<Surreal<Any>>,
     config: &Config,
 ) -> Result<u64, SurrealError> {
-    let dead_for = effective_reenqueue_secs(config);
+    let dead_for = effective_reenqueue_millis(config);
     let mut response = conn
         .query(REENQUEUE_ORPHANED)
         .bind(("queue", config.queue().to_string()))
