@@ -1,8 +1,5 @@
-BEGIN;
-LET $previous = SELECT VALUE last_seen FROM $worker;
-LET $live = array::len($previous) > 0
-    AND $previous[0] > time::now() - duration::from_secs($keep_alive);
 UPSERT $worker CONTENT {
+    name: $name,
     queue: $queue,
     storage_name: $storage,
     layers: $layers,
@@ -10,5 +7,3 @@ UPSERT $worker CONTENT {
     started_at: time::now(),
     last_seen: time::now()
 };
-RETURN $live;
-COMMIT;

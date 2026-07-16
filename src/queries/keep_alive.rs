@@ -20,21 +20,18 @@ const KEEP_ALIVE: &str = include_str!(concat!(
 /// Refresh the worker heartbeat so it is not treated as orphaned
 pub async fn keep_alive(
     conn: &Arc<Surreal<Any>>,
-    config: &Config,
+    _config: &Config,
     worker: &WorkerContext,
     instance: &str,
 ) -> Result<(), SurrealError> {
-    let name = worker.name().to_owned();
-    let id = RecordId::new(WORKER_TABLE, name.clone());
-    let mut response = conn
-        .query(KEEP_ALIVE)
-        .bind(("worker", id))
-        .bind(("queue", config.queue().to_string()))
-        .bind(("instance", instance.to_owned()))
-        .await?;
+    let id = RecordId::new(WORKER_TABLE, instance.to_owned());
+    let mut response = conn.query(KEEP_ALIVE).bind(("worker", id)).await?;
     let updated: Vec<Value> = response.take(0)?;
     if updated.is_empty() {
-        return Err(SurrealError::WorkerNotFound(name));
+        return Err(SurrealError::WorkerNotFound(format!(
+            "{} (instance {instance})",
+            worker.name()
+        )));
     }
     Ok(())
 }

@@ -11,3 +11,6 @@ UPDATE job SET
       AND ((status IN ['Queued', 'Running'] AND lock_by != NONE AND lock_by NOTINSIDE $live)
            OR (status = 'Queued' AND lock_by IS NONE AND lock_at != NONE
                AND lock_at <= time::now() - duration::from_secs($dur)));
+
+DELETE worker WHERE queue = $queue
+    AND last_seen < time::now() - duration::from_secs($dur * 4);

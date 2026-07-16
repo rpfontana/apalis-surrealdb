@@ -22,6 +22,7 @@ DEFINE INDEX IF NOT EXISTS job_done ON job COLUMNS queue, done_at;
 DEFINE INDEX IF NOT EXISTS job_idempotency ON job COLUMNS queue, idempotency_key;
 
 DEFINE TABLE IF NOT EXISTS worker SCHEMAFULL;
+DEFINE FIELD IF NOT EXISTS name ON worker TYPE string DEFAULT '';
 DEFINE FIELD IF NOT EXISTS queue ON worker TYPE string;
 DEFINE FIELD IF NOT EXISTS storage_name ON worker TYPE string;
 DEFINE FIELD IF NOT EXISTS layers ON worker TYPE option<string>;
