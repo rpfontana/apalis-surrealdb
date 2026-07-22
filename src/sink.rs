@@ -1,19 +1,20 @@
 use std::{
     fmt,
+    future::Future,
     marker::PhantomData,
     pin::Pin,
     sync::Arc,
     task::{Context, Poll},
 };
 
-use futures::{FutureExt, Sink, future::BoxFuture};
+use futures::{FutureExt, Sink};
 use surrealdb::{Surreal, engine::any::Any};
 
 use crate::{
     CompactType, Config, SurrealError, SurrealStorage, SurrealTask, queries::push_tasks::push_tasks,
 };
 
-type FlushFuture = BoxFuture<'static, Result<(), SurrealError>>;
+type FlushFuture = Pin<Box<dyn Future<Output = Result<(), SurrealError>> + Send + Sync + 'static>>;
 
 /// Buffered sink that flushes queued tasks into the SurrealDB backend
 #[pin_project::pin_project]
